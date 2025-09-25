@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>未来実験室プラットフォーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #4a5568; padding: 8px; text-align: left; }
+        th { background-color: #2d3748; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-start min-h-screen p-4 md:p-8">
+
+    <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-4xl mb-8">
+        <h1 class="text-4xl font-bold text-center mb-2 text-cyan-400">未来実験室プラットフォーム</h1>
+        <p class="text-center text-gray-400 mb-8">ユーザーIDを入力し、実験環境を選択してください。</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="userId" class="block mb-2 text-sm font-medium text-gray-300">ユーザーID</label>
+                <input type="text" id="userId" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5" placeholder="例: baumukuren" required>
+            </div>
+            <div>
+                <label for="packageSelect" class="block mb-2 text-sm font-medium text-gray-300">実験環境パッケージ</label>
+                <select id="packageSelect" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5">
+                    <!-- ▼▼▼ 究極の選択肢を追加 ▼▼▼ -->
+                    <option value="full-package" selected>未来実験室フルパッケージ (全機能統合)</option>
+                    <!-- ▲▲▲ 究極の選択肢を追加 ▲▲▲ -->
+                    <option value="interactive-analysis">インタラクティブ分析環境 (JupyterLab)</option>
+                    <option value="real-time-monitoring">リアルタイム監視環境 (InfluxDB + Grafana)</option>
+                    <option value="data-science-kit">データサイエンスキット (PostgreSQL + MinIO)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+            <button id="startButton" class="w-full bg-cyan-600 hover:bg-cyan-700 focus:ring-4 focus:outline-none focus:ring-cyan-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 col-span-full sm:col-span-1">
+                開始 / 更新
+            </button>
+            <button id="stopButton" class="w-full bg-yellow-600 hover:bg-yellow-700 focus:ring-4 focus:outline-none focus:ring-yellow-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 hidden">
+                一時停止
+            </button>
+            <button id="deleteButton" class="w-full bg-red-600 hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 hidden">
+                完全削除
+            </button>
+        </div>
+
+        <div id="connectionInfo" class="mt-4 p-4 bg-gray-700 rounded-lg text-gray-300 whitespace-pre-wrap font-mono text-sm min-h-[150px]">
+            接続情報がここに表示されます...
+        </div>
+        
+        <div class="flex space-x-4">
+            <button id="jupyterButton" class="w-full mt-4 bg-orange-600 hover:bg-orange-700 focus:ring-4 focus:outline-none focus:ring-orange-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 hidden">
+                JupyterLabを開く
+            </button>
+            <button id="galleryButton" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 hidden">
+                パブリック・ギャラリーを見る
+            </button>
+        </div>
+    </div>
+
+    <div id="sqlCockpit" class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-4xl hidden">
+        <h2 class="text-2xl font-bold mb-4 text-cyan-400">SQL コックピット</h2>
+        <textarea id="sqlQuery" rows="4" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5 font-mono" placeholder="SELECT version();"></textarea>
+        <button id="executeButton" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:outline-none focus:ring-emerald-800 font-medium rounded-lg text-sm px-5 py-3 text-center">SQLを実行</button>
+        <div id="sqlResult" class="mt-6 p-4 bg-gray-900 rounded-lg min-h-[100px] text-gray-300 whitespace-pre-wrap font-mono text-sm overflow-x-auto">結果...</div>
+    </div>
+
+    <script>
+        // --- Element References ---
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const jupyterButton = document.getElementById('jupyterButton');
+        const galleryButton = document.getElementById('galleryButton');
+        const connectionInfoDiv = document.getElementById('connectionInfo');
+        const userIdInput = document.getElementById('userId');
+        const packageSelect = document.getElementById('packageSelect');
+        const sqlCockpit = document.getElementById('sqlCockpit');
+        const sqlQueryTextarea = document.getElementById('sqlQuery');
+        const executeButton = document.getElementById('executeButton');
+        const sqlResultDiv = document.getElementById('sqlResult');
+
+        let jupyterUrl = '';
+        let galleryUrl = '';
+
+        // --- UI Control Functions ---
+        function resetUIState() {
+            stopButton.classList.add('hidden');
+            deleteButton.classList.add('hidden');
+            jupyterButton.classList.add('hidden');
+            galleryButton.classList.add('hidden');
+            sqlCockpit.classList.add('hidden');
+        }
+
+        // --- Event Listeners ---
+        startButton.addEventListener('click', async () => {
+            const userId = userIdInput.value;
+            const selectedPackage = packageSelect.value;
+            if (!userId) { connectionInfoDiv.textContent = 'エラー: ユーザーIDを入力してください。'; return; }
+            
+            connectionInfoDiv.textContent = '実験環境を起動中...';
+            startButton.disabled = true;
+            resetUIState();
+
+            try {
+                const response = await fetch('http://localhost:8000/start-experiment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: userId, packageName: selectedPackage })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    let infoText = `✅ 成功！ 環境の準備ができました。\n\n`;
+                    const ports = data.servicePorts || {};
+                    const publicPorts = data.publicServicePorts || {};
+
+                    if (ports.postgres) { infoText += `--- PostgreSQL ---\nHost: localhost\nPort: ${ports.postgres}\n\n`; sqlCockpit.classList.remove('hidden');}
+                    if (ports['minio-ui']) { infoText += `--- プライベートストレージ (MinIO) ---\nWeb UI: http://localhost:${ports['minio-ui']}\n\n`; }
+                    if (ports.jupyter) { infoText += `--- JupyterLab ---\n下のボタンからアクセスしてください。\n`; jupyterUrl = `http://localhost:${ports.jupyter}`; jupyterButton.classList.remove('hidden'); }
+                    if (ports.influxdb) { infoText += `--- InfluxDB ---\nWeb UI & API: http://localhost:${ports.influxdb}\n(セットアップが必要です)\n\n`; }
+                    if (ports.grafana) { infoText += `--- Grafana ---\nDashboard: http://localhost:${ports.grafana}\n(Login: admin/admin)\n\n`; }
+                    if (publicPorts.console) { infoText += `--- パブリック・ギャラリー ---\n誰でもアクセス可能な共有ストレージです。\n`; galleryUrl = `http://localhost:${publicPorts.console}`; galleryButton.classList.remove('hidden');}
+                    
+                    connectionInfoDiv.textContent = infoText;
+                    stopButton.classList.remove('hidden');
+                    deleteButton.classList.remove('hidden');
+                } else {
+                    connectionInfoDiv.textContent = `❌ エラー: ${data.message || 'サーバーエラー'}`;
+                }
+            } catch (error) {
+                connectionInfoDiv.textContent = `❌ ネットワークエラー: ${error.message}`;
+            } finally {
+                startButton.disabled = false;
+            }
+        });
+        
+        stopButton.addEventListener('click', async () => {
+             const userId = userIdInput.value;
+            if (!userId || !confirm(`環境を一時停止しますか？\nデータは保持されますが、コンテナは停止します。`)) return;
+            connectionInfoDiv.textContent = `環境を一時停止中...`;
+            try {
+                const response = await fetch('http://localhost:8000/stop-experiment', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userId })
+                });
+                if (response.ok) {
+                    connectionInfoDiv.textContent = `✅ 成功！\n環境は一時停止されました。\n再度「開始」ボタンを押すと、データを引き継いで再開します。`;
+                    resetUIState();
+                } else { throw new Error('サーバーエラー'); }
+            } catch (error) { connectionInfoDiv.textContent = `❌ 停止エラー: ${error.message}`; }
+        });
+
+        deleteButton.addEventListener('click', async () => {
+            const userId = userIdInput.value;
+            if (!userId || !confirm(`本当に環境とデータを完全に削除しますか？\nこの操作は元に戻せません。`)) return;
+            connectionInfoDiv.textContent = `環境とデータを完全に削除中...`;
+            try {
+                const response = await fetch('http://localhost:8000/delete-experiment', {
+                    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userId })
+                });
+                if (response.ok) {
+                    connectionInfoDiv.textContent = `✅ 成功！\n環境とデータは完全に削除されました。`;
+                    resetUIState();
+                } else { throw new Error('サーバーエラー'); }
+            } catch (error) { connectionInfoDiv.textContent = `❌ 削除エラー: ${error.message}`; }
+        });
+
+        jupyterButton.addEventListener('click', () => { if (jupyterUrl) window.open(jupyterUrl, '_blank'); });
+        galleryButton.addEventListener('click', () => { if (galleryUrl) window.open(galleryUrl, '_blank'); });
+
+        executeButton.addEventListener('click', async () => {
+            const userId = userIdInput.value;
+            const sqlQuery = sqlQueryTextarea.value;
+            if (!userId || !sqlQuery) { sqlResultDiv.textContent = 'ユーザーIDとSQLクエリを入力してください。'; return; }
+            sqlResultDiv.textContent = '実行中...';
+            executeButton.disabled = true;
+            try {
+                const response = await fetch('http://localhost:8000/execute-sql', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userId, sqlQuery: sqlQuery })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    if (data.headers && data.rows && data.rows.length > 0) {
+                        let tableHTML = '<table><thead><tr>';
+                        data.headers.forEach(header => tableHTML += `<th>${header}</th>`);
+                        tableHTML += '</tr></thead><tbody>';
+                        data.rows.forEach(row => { tableHTML += '<tr>'; row.forEach(cell => tableHTML += `<td>${cell === null ? 'NULL' : cell}</td>`); tableHTML += '</tr>'; });
+                        tableHTML += '</tbody></table>';
+                        sqlResultDiv.innerHTML = tableHTML;
+                    } else { sqlResultDiv.textContent = `✅ ${data.message || 'クエリは正常に実行されました。（結果セットなし）'}`; }
+                } else { sqlResultDiv.textContent = `❌ エラー: ${data.message}`; }
+            } catch (error) { sqlResultDiv.textContent = `❌ ネットワークエラー: ${error.message}`; } 
+            finally { executeButton.disabled = false; }
+        });
+    </script>
+</body>
+</html>
+
